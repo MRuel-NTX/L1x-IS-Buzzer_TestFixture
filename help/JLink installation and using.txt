@@ -1,0 +1,21 @@
+For downloading actual version of JLink use next url-link: https://www.segger.com/downloads/jlink/
+Get from Linux ARM section. TGZ Archive will setup without registarion by system paths. It just unpacking all stuff in target folder.
+For system kind installation use DEB Installer version.
+Usually I use 32bit version of package.
+
+sudo dpkg -i <deb_pkg_name>    # Install deb package
+sudo dpkg -r <deb_pkg_name>    # Remove  deb package
+
+Command for unpacking tgz archive: tar xvzf arch_name.tgz
+
+help for deb installation/removing:
+https://askubuntu.com/questions/40779/how-do-i-install-a-deb-file-via-the-command-line
+
+
+Help on JLink Commander by url-link: https://wiki.segger.com/J-Link_Commander
+
+For automated programming our devices we use next approach:
+- create script.jlink which consist the list of commands (actions) with properties: firmware name, speed, timeouts, device and programming addresses
+- prepare firmware file
+- has connected USB JLink programmer
+- call JLinkExe tool with parameters

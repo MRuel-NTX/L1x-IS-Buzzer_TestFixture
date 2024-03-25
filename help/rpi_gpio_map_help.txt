@@ -1,0 +1,14 @@
+# EXP_LATCH_RESET      PIN 21 Output Low     GPIO 9
+# LATCH_PANEL_DETECT#  PIN 19 Input High     GPIO 10
+# EXP_RESET#           PIN 23 Input High     GPIO 11        i2c_addr 0x20
+# PWR_GOOD_ADC_RESET#  PIN 11 Output High    GPIO 17        i2c_addr 0x45
+# EXP_OE#              PIN 15 Output High    GPIO 22
+# MUX_A1               PIN 16 Output Low     GPIO 23
+# MUX_A0               PIN 18 Output Low     GPIO 24
+# MUX_EN               PIN 22 Output Low     GPIO 25
+# MAIN_LED_ADC_RESET#  PIN 13 Output High    GPIO 27        i2c_addr 0x49
+
+# I2C_SDA              PIN 3                 GPIO 2         no need to configure i2c - work out of the box
+# I2C_SCL              PIN 5                 GPIO 3
+# TX                   PIN 8                 GPIO 14
+# RX                   PIN 10                GPIO 15

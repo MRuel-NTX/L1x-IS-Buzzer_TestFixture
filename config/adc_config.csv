@@ -1,0 +1,2 @@
+name,i2c_addr,vref,ain0_input_v,div0_coef,ain1_input_v,div1_coef,ain2_input_v,div2_coef,ain3_input_v,div3_coef,common_div_coef,deviation_percent
+POWER_GOOD,0x45,5.0,3.3,,5.0,,1.65_3.3,,0.6_2.6,,1,5

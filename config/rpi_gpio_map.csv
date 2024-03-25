@@ -1,0 +1,16 @@
+pin,mode,name,gpio
+11,in:0,7V5_COMP,17
+13,in:0,7V5_SSR_COMP,27
+15,in:0,7V5_FB_COMP,22
+7,out:0,UUT_PWR_EN,4
+16,out:1,MOS_USB_N_EN#,23
+18,out:1,MOS_USB_P_EN#,24
+22,out:1,MOS_LAMP_LR_EN#,25
+24,in:0,SW_OUT_1,8
+26,in:0,SW_OUT_2,7
+32,in:0,FB_AND_GATE,12
+33,out:0,LA_PWM,13
+36,in:0,ADC_DRDY#,16
+37,out:1,ADC_RST#,26
+3,,I2C_SDA,2
+5,,I2C_SCL,3

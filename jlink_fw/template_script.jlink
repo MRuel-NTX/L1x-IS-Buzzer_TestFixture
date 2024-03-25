@@ -1,0 +1,14 @@
+if swd
+device NRF52833_XXAA
+ExitOnError 1
+speed 4000
+connect
+sleep 50
+r
+h
+erase
+sleep 50
+loadfile FW_PATH 0x00000000
+go
+sleep 250
+exit

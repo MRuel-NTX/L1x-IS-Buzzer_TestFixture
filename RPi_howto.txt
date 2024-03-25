@@ -1,0 +1,19 @@
+1. Download Raspberry Pi OS with desktop from - https://www.raspberrypi.com/software/operating-systems/
+or Raspberry Pi OS (64-bit)
+
+https://downloads.raspberrypi.com/raspios_armhf/images/raspios_armhf-2024-03-15/2024-03-15-raspios-bookworm-armhf.img.xz
+https://downloads.raspberrypi.com/raspios_arm64/images/raspios_arm64-2024-03-15/2024-03-15-raspios-bookworm-arm64.img.xz
+
+2. Download Etcher flash tool from https://etcher.balena.io/
+or Raspberry Pi Imager from https://downloads.raspberrypi.org/imager/imager_latest.exe
+
+3. Prepare SD card with specified image (thwough RPi Imager you can specify additional settings for RPi OS: username, password, etc)
+
+4. Copy files with source code and config files to the RPi.
+
+5. For all *.py files make executable mode: chmod +x <filename>.py . To be good a sure what all files has a LF (Unix format line ending)
+
+6. For current version of code for L1x Buzzer no need setup extra libraries (python or linux).
+
+7. For the barcode scanner py function need run as sudo rights and do correct choose number of the device <hidrawX>, now X - is 5
+
