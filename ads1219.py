@@ -221,7 +221,6 @@ class ADS1219:
         return self
     def __exit__(self, exc_type, exc_value, traceback):
         self.bus.close()
-
     def __del__(self):  # Destructor
         print(f'ADS1219({hex(self.i2c_addr)}) destructor')
         self.bus.close()
