@@ -7,6 +7,7 @@ import datetime
 import subprocess
 from pathlib import Path
 from servo import Servo 
+from adsp9960 import Adsp9960, CLEAR, RED, GREEN, BLUE
 
 
 dir_path = os.path.dirname(os.path.realpath(__file__))
@@ -81,3 +82,18 @@ actuator.set_duty_cycle_range(2.5, 13)
 actuator.set_angle(180)
 time.sleep(3)
 actuator.set_angle(10)
+
+#=========================== Ambient light sensor test =============================
+light_sensor = Adsp9960()
+light_sensor.enable_color_readings()
+while(1):
+    if light_sensor.check_for_colored_lght(RED, 10):
+        print(f"Found RED light")
+        
+    if light_sensor.check_for_colored_lght(GREEN, 10):
+        print(f"Found GREEN light")
+        
+    if light_sensor.check_for_colored_lght(BLUE, 10):
+        print(f"Found BLUE light")
+
+    time.sleep(0.5)
