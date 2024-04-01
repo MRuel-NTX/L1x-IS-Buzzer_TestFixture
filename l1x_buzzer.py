@@ -30,6 +30,7 @@ GPIO.setmode(GPIO.BCM)
 
 Audible_Alarm_FLAG = False
 FULL_PASS_FLAG=False
+rgb_data = []
 
 HEADER_WIDTH = 100
 
@@ -217,8 +218,10 @@ def qr_code_csv():
     CSV_FLAG = 'False'
 
     while scanflag:
-        scanned_qr = input('\n'+'Scan DUT QR code'+'\n')
+        scanned_qr = input('\n'+'Scan DUT QR code to start the test sequence'+'\n')
+        time.sleep(1) #added for terminal clarity
         print('\n'+ scanned_qr +'\n')
+        time.sleep(1) #added for terminal clarity
         qr_split = []
 
         if "," in scanned_qr:
@@ -324,10 +327,10 @@ def check_mic_level():  # now applicable only for L1x buzzer
 # 'MOS_LAMP_LR_EN#' = 25, 'SW_OUT_1', 'SW_OUT_2', 'FB_AND_GATE', 'LA_PWM', 'ADC_DRDY#', 'ADC_RST#'
 
 def check_passthrough():
-    GPIO.setup(23,GPIO.OUT)
-    GPIO.setup(24,GPIO.OUT)
-    GPIO.setup(25,GPIO.OUT)
-    GPIO.setup(12,GPIO.IN)
+    #GPIO.setup(23,GPIO.OUT)
+    #GPIO.setup(24,GPIO.OUT)
+    #GPIO.setup(25,GPIO.OUT)
+    #GPIO.setup(12,GPIO.IN)
 
     FB_AND_GATE = GPIO.input(12)
     counter = 0
@@ -379,7 +382,7 @@ def check_passthrough():
 
 #==================================================================================
 
-#======================== Test sequence: Passthrough   ============================
+#======================== Test sequence: Power Enable   ============================
 # Activation of the Nmos and read FB and gate
 # If activation and fb signal change = test pass
 # flag test status (pass or fail)
@@ -389,10 +392,10 @@ def check_passthrough():
 
 def check_power_enable():
 
-    GPIO.setup(4,GPIO.OUT)
-    GPIO.setup(17,GPIO.IN)
-    GPIO.setup(27,GPIO.IN)
-    GPIO.setup(22,GPIO.IN)
+    #GPIO.setup(4,GPIO.OUT)
+    #GPIO.setup(17,GPIO.IN)
+    #GPIO.setup(27,GPIO.IN)
+    #GPIO.setup(22,GPIO.IN)
 
     WC_7V5 = GPIO.input(17)
     WC_SSR = GPIO.input(27)
@@ -422,7 +425,7 @@ def check_power_enable():
 
             if WC_7V5 and WC_SSR and WC_FB == False:
                 GPIO.output(4,0)
-                time.sleep(0.1)
+                time.sleep(1)
                 counter += 1
                 print('\n'+'WC Failed RoF'+'\n')
                 if counter >= 5:
@@ -443,7 +446,7 @@ def check_power_enable():
 #============================  Linear actuator test  ===============================
 # ipwm = 3 or ipwm = 11
 def linear_actuator():
-    GPIO.setup(13,GPIO.OUT)
+    #GPIO.setup(13,GPIO.OUT)
     pwm = GPIO.PWM(13,50)
     pwm.start(0)
     
@@ -506,14 +509,37 @@ def rgb_all():
 
     # Read and print all colors
     colors = sensor.read_colors()
+    #colorlight = sensor.check_for_colored_light(RED,0)
+
     if colors == I2C_FAILURE:
         print("Failed to read color data.")
         return
 
+    #time.sleep(0.1) # add clarity in terminal
+    #print("Red: ", colors[RED])
+    #print("Green: ", colors[GREEN])
+    #print("Blue: ", colors[BLUE])
+ 
+    #time.sleep(0.1) # add clarity in terminal
+    choice = input('Enter color to be tested, red, green or blue')
+    while True:
+        try:
+            colors = sensor.read_colors()
+            print(f'Red: {colors[RED]}, Green: {colors[GREEN]}, Blue: {colors[BLUE]}')
+            rgb_data.append([colors[RED], colors[GREEN], colors[BLUE]])
+            time.sleep(0.1)  # pause for 100 ms
+
+        except KeyboardInterrupt:
+            with open('rgb_data_'+str(choice)+'.csv', 'w', newline='') as file:
+                writer = csv.writer(file)
+                writer.writerows(rgb_data)
+            GPIO.cleanup()
+            return
+
     # Print out the color readings
-    print("Red: ", colors[RED])
-    print("Green: ", colors[GREEN])
-    print("Blue: ", colors[BLUE])
+    # print("Red: ", colors[RED])
+    # print("Green: ", colors[GREEN])
+    # print("Blue: ", colors[BLUE])
 
 #================================================================================== 
 
@@ -545,8 +571,8 @@ def listen_Buzzer():
 # Read the 2 reed switches, if the operator removes the top section while tests are ongoing,
 # The test sequence must be canceled.
 def Detection_Switches():
-    GPIO.setup(7, GPIO.IN)
-    GPIO.setup(8, GPIO.IN)
+    #GPIO.setup(7, GPIO.IN)
+    #GPIO.setup(8, GPIO.IN)
 
     SW1 = GPIO.input(7)
     SW2 = GPIO.input(8)
@@ -575,9 +601,32 @@ if __name__ == '__main__':
     '''if not is_usb_jlink_connected():
         print('ERROR: Not found USB JLink device')
         exit(1)'''
+    x=0
+    
     is_power_good()
     CSV_STATUS = qr_code_csv()
     print(CSV_STATUS[0])
+  
+    while(Detection_Switches()):
+        
+        if CSV_STATUS[0] == 'True':
+            check_passthrough()
+            check_power_enable()
+            check_current_sensor()
+            for x in range(5):
+                #rgb_sensor()
+                rgb_all()
+                #linear_actuator()
+                #check_mic_level()
+
+            FULL_PASS_FLAG=listen_Buzzer()
+        if FULL_PASS_FLAG==True:
+            print('\n'+'TEST PASSED'+'\n')
+            print('\n'+'TEST PASSED'+'\n')
+            print('\n'+'TEST PASSED'+'\n')
+            print('\n'+'TEST PASSED'+'\n')
+            exit
+    '''
     while Detection_Switches():
     # This code will run as long as Detection_Switches() returns True
         rgb_sensor()
@@ -588,21 +637,4 @@ if __name__ == '__main__':
             check_current_sensor()
             linear_actuator()
             check_mic_level()
-    '''
-    while(Detection_Switches()):
-        rgb_sensor()
-        rgb_all()
-        if CSV_STATUS[0] == 'True':
-            check_passthrough()
-            check_power_enable()
-            check_current_sensor()
-            linear_actuator()
-            check_mic_level()
-
-        FULL_PASS_FLAG=listen_Buzzer()
-        if FULL_PASS_FLAG==True:
-            print('\n'+'TEST PASSED'+'\n')
-            print('\n'+'TEST PASSED'+'\n')
-            print('\n'+'TEST PASSED'+'\n')
-            print('\n'+'TEST PASSED'+'\n')
     '''
