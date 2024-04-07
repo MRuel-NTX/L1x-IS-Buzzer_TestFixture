@@ -31,6 +31,10 @@ GPIO.setmode(GPIO.BCM)
 Audible_Alarm_FLAG = False
 FULL_PASS_FLAG=False
 rgb_data = []
+DUT_SN = ""
+DUT_MAC= "00:00:00:00:00:00"
+colors= ''
+PAIRED_FLAG=False
 
 HEADER_WIDTH = 100
 
@@ -212,10 +216,11 @@ def qr_code_csv():
     dir_path = os.path.dirname(os.path.realpath(__file__))
     scanflag = True
     actual_weekday = 0
-    DUT_SN = ""
+
+
     DUT_MAC= "00:00:00:00:00:00"
     PASS_FAIL_FLAG = ""
-    CSV_FLAG = 'False'
+    CSV_FLAG = False
 
     while scanflag:
         scanned_qr = input('\n'+'Scan DUT QR code to start the test sequence'+'\n')
@@ -259,14 +264,14 @@ def qr_code_csv():
                     with open(DUT_PATH, "a", newline="") as file:
                         writer = csv.DictWriter(file, fieldnames=data.keys())
                         writer.writerow(data)
-                        CSV_FLAG = 'True'
+                        CSV_FLAG = True
                         print('\n'+f"Data written to '{DUT_PATH}'."+'\n')
                 else:
                     with open(DUT_PATH, 'w', newline='', encoding='utf-8') as file:
                         writer = csv.DictWriter(file, fieldnames=header)
                         writer.writeheader()
                         writer.writerow(data)
-                        CSV_FLAG = 'True'
+                        CSV_FLAG = True
                         print('\n'+f"CSV file '{DUT_PATH}' created and data written."+'\n')
 
             if actual_weekday != int(scanned_isoweek):
@@ -281,14 +286,14 @@ def qr_code_csv():
                     with open(DUT_PATH, "a", newline="") as file:
                         writer = csv.DictWriter(file, fieldnames=data.keys())
                         writer.writerow(data)
-                        CSV_FLAG = 'True'
+                        CSV_FLAG = True
                         print('\n'+f"Data written to '{DUT_PATH}'."+'\n')
                 else:
                     with open(DUT_PATH, 'w', newline='', encoding='utf-8') as file:
                         writer = csv.DictWriter(file, fieldnames=header)
                         writer.writeheader()
                         writer.writerow(data)
-                        CSV_FLAG = 'True'
+                        CSV_FLAG = True
                         print('\n'+f"CSV file '{DUT_PATH}' created and data written."+'\n')
 
     return CSV_FLAG,DUT_SN,DUT_MAC
@@ -449,15 +454,48 @@ def linear_actuator():
     #GPIO.setup(13,GPIO.OUT)
     pwm = GPIO.PWM(13,50)
     pwm.start(0)
-    
+    i=0
+    PAIRED_FLAG=False
+    changestep='1'
     PAIRING_REQUEST_FLAG=1
+    print('before try linear actuator')
+    
+
+    #read LED should be blue
+    #if led is blue -> pairing flag =0
+    while PAIRED_FLAG==False:
+        try:
+            rgb_all()
+            time.sleep(1)
+            if RED and PAIRED_FLAG==False:
+                pwm.ChangeDutyCycle(2)
+                #time.sleep(1)
+                i += 1
+                changestate=input('enter y if blue LED')
+                if i>=50:
+                    i=0
+            if changestate=='y':
+                PAIRED_FLAG=True
+                print('\n'+f'{BLUE}'+'\n')
+                pwm.ChangeDutyCycle(11)
+                pwm.stop()
+                #if PAIRED_FLAG==True:
+                #    pwm.start(0)
+
+
+        except KeyboardInterrupt:
+            pwm.stop()
+
+    
+
+    '''
     try:
         while PAIRING_REQUEST_FLAG==1:
-            if PAIRING_REQUEST_FLAG==1:
-                pwm.ChangeDutyCycle(10)
+            pwm.ChangeDutyCycle(10)
                 #read LED should be blue
                 #if led is blue -> pairing flag =0
-                print('Linear_Actuator is now on')
+            print('\n'+'Linear_Actuator is now on'+'\n')
+            if
                 time.sleep(1)
                 PAIRING_REQUEST_FLAG=0
 
@@ -469,7 +507,7 @@ def linear_actuator():
 
     except KeyboardInterrupt:
         pwm.stop()
-
+    '''
 #==================================================================================            
 
 #=========================== Ambient light sensor test =============================
@@ -519,23 +557,25 @@ def rgb_all():
     #print("Red: ", colors[RED])
     #print("Green: ", colors[GREEN])
     #print("Blue: ", colors[BLUE])
- 
     #time.sleep(0.1) # add clarity in terminal
-    choice = input('Enter color to be tested, red, green or blue')
-    while True:
-        try:
-            colors = sensor.read_colors()
-            print(f'Red: {colors[RED]}, Green: {colors[GREEN]}, Blue: {colors[BLUE]}')
-            rgb_data.append([colors[RED], colors[GREEN], colors[BLUE]])
-            time.sleep(0.1)  # pause for 100 ms
 
-        except KeyboardInterrupt:
-            with open('rgb_data_'+str(choice)+'.csv', 'w', newline='') as file:
-                writer = csv.writer(file)
-                writer.writerows(rgb_data)
-            GPIO.cleanup()
-            return
+    #choice = input('Enter color to be tested, red, green or blue')
 
+    #while True:
+    try:
+        colors = sensor.read_colors()
+        print(f'Red: {colors[RED]}, Green: {colors[GREEN]}, Blue: {colors[BLUE]}')
+        rgb_data.append([colors[RED], colors[GREEN], colors[BLUE]])
+        time.sleep(0.01)  # pause for 10 ms
+        return(colors)
+    
+    except KeyboardInterrupt:
+            #with open('rgb_data_'+str(choice)+'.csv', 'w', newline='') as file:
+            #    writer = csv.writer(file)
+            #    writer.writerows(rgb_data)
+        GPIO.cleanup()
+        return
+        
     # Print out the color readings
     # print("Red: ", colors[RED])
     # print("Green: ", colors[GREEN])
@@ -546,7 +586,7 @@ def rgb_all():
 #======================== Test sequence: Listen   ============================
 def listen_Buzzer():
     MAX_DBA=True
-    DBA_TH=90
+    DBA_TH=110
     Audible_Alarm_FLAG = False
     try:
         while(MAX_DBA):
@@ -564,7 +604,33 @@ def listen_Buzzer():
     
     except KeyboardInterrupt:
         GPIO.cleanup()
+
+
+
+'''
+### Test of input selected DBA thresh, will print the selected dBA level. Will run the listen mic until dBA th is acheived.
+
+
+def listen_Buzzer(DBA_TH):
+    MAX_DBA=True
+    Audible_Alarm_FLAG = False
+    print(f'Selected dBa level: {DBA_TH}')
+    try:
+        while(MAX_DBA):
+            sound_level = check_mic_level()
+            print('\n'+f'{sound_level} dBA'+'\n')
+            if sound_level >= DBA_TH:
+                time.sleep(1)
+                print('\n'+f'TEST PASSED {sound_level} dBA'+'\n')
+                MAX_DBA=False
+                Audible_Alarm_FLAG = True
         
+            print(Audible_Alarm_FLAG)
+
+        return Audible_Alarm_FLAG    
+    
+    except KeyboardInterrupt:
+        GPIO.cleanup()'''
 
 #==================================================================================
 #======================== Test sequence: Detection Switches   ============================
@@ -576,6 +642,7 @@ def Detection_Switches():
 
     SW1 = GPIO.input(7)
     SW2 = GPIO.input(8)
+
     result = SW1 and SW2
 
     print(f'SW1: {SW1}\nSW2: {SW2}\nResult: {result}\n')
@@ -602,31 +669,49 @@ if __name__ == '__main__':
         print('ERROR: Not found USB JLink device')
         exit(1)'''
     x=0
+    PAIRED_FLAG=False
     
-    is_power_good()
-    CSV_STATUS = qr_code_csv()
+
+    is_power_good() #Power of Test PCBA
+    check_passthrough() #Unit is connected to Test PCBA
+    CSV_STATUS = qr_code_csv() #Unit ID is scanned (should save data)
     print(CSV_STATUS[0])
   
-    while(Detection_Switches()):
+    while True:
+    #while(Detection_Switches()): ######need to be added back
         
-        if CSV_STATUS[0] == 'True':
-            check_passthrough()
+        if CSV_STATUS[0] == True:
             check_power_enable()
-            check_current_sensor()
+            linear_actuator()
+            listen_Buzzer()
+            rgb_all()
+
+
+
+            '''
+            yn=input('\n'+'Please Turn on the Unit'+'\n'+'When the unit is powered, enter Y'+'\n'+'To exit, enter N')
+            #check_passthrough()
+            if yn == 'y' or 'Y':
+                print("=========================== Programming Step ======================================")
+                programmed=input('\n'+'Is the programming done?'+'\n'+'Enter Y when completed'+'\n'+'To Exit, enter N')
+
+                #check_power_enable()
+                #check_current_sensor()
+                
             for x in range(5):
                 #rgb_sensor()
                 rgb_all()
-                #linear_actuator()
+                linear_actuator()
                 #check_mic_level()
 
-            FULL_PASS_FLAG=listen_Buzzer()
-        if FULL_PASS_FLAG==True:
-            print('\n'+'TEST PASSED'+'\n')
-            print('\n'+'TEST PASSED'+'\n')
-            print('\n'+'TEST PASSED'+'\n')
-            print('\n'+'TEST PASSED'+'\n')
-            exit
-    '''
+                FULL_PASS_FLAG=listen_Buzzer()
+            if FULL_PASS_FLAG==True:
+                print('\n'+'TEST PASSED'+'\n')
+                print('\n'+'TEST PASSED'+'\n')
+                print('\n'+'TEST PASSED'+'\n')
+                print('\n'+'TEST PASSED'+'\n')
+                exit
+    
     while Detection_Switches():
     # This code will run as long as Detection_Switches() returns True
         rgb_sensor()
