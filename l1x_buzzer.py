@@ -11,13 +11,11 @@ from datetime import date
 import subprocess
 from pathlib import Path
 from servo import Servo 
-#from ADSP9960 import Adsp9960, CLEAR, RED, GREEN, BLUE
 from RGB_SENS_TEST import Adsp9960,I2C_FAILURE,CLEAR, RED, GREEN, BLUE
 
 
 dir_path = os.path.dirname(os.path.realpath(__file__))
 GPIO.setmode(GPIO.BCM)
-
 
 Audible_Alarm_FLAG = False
 FULL_PASS_FLAG=False
@@ -40,6 +38,68 @@ atexit.register(exit_handler)
 LOG_PATH = os.path.join(dir_path, 'log')
 if not os.path.exists(LOG_PATH):
     os.makedirs(LOG_PATH)
+    
+FW_FNAME = 'mcuboot_app_merged_0.1.3+1.hex'
+FW_PATH = os.path.join(dir_path, 'jlink_fw', FW_FNAME)
+
+JLINK_SCRIPT_FNAME = '.'.join([Path(FW_FNAME).stem, 'jlink'])
+JLINK_SCPIRT_PATH = os.path.join(dir_path, 'jlink_fw', JLINK_SCRIPT_FNAME)
+
+JLINK_TEMPLATE_SCRIPT_FNAME = 'template_script.jlink'
+JLINK_TEMPLATE_SCPIRT_PATH = os.path.join(dir_path, 'jlink_fw', JLINK_TEMPLATE_SCRIPT_FNAME)
+
+    
+def is_usb_jlink_connected():
+   ''' in this version function we suppose using only one connected USB JLink device '''
+   print('\n' + ' USB JLINK CHECK PRESENCE '.center(HEADER_WIDTH, '='))
+   response = subprocess.run('echo exit | JLinkExe -NoGui 1', shell=True, capture_output=True)
+   str_resp = response.stdout.decode('utf-8')
+
+   USB_OK = 'USB...O.K.'
+   USB_FAILED = 'USB...FAILED'
+   SN = 'S/N:'
+   # check on 'USB...O.K.' or 'USB...FAILED'
+   # if 'USB...O.K.' then get S/N (serial number)
+   res = False
+   if USB_OK in str_resp:
+       JLINK_USB_SN = None
+       for l in str_resp.splitlines():
+           if l.startswith(SN):
+               JLINK_USB_SN = l.split()[1]  # split string with S/N and get the second item with value
+               res = True
+               break
+       print('OK: USB JLink found, S/N:', JLINK_USB_SN)
+   elif USB_FAILED in str_resp:
+       print('ERROR: USB JLink not found')
+   else:
+       print('ERROR: Unknown status for USB JLink')
+
+   return res
+
+def jlink_programming(script_path=JLINK_SCPIRT_PATH):
+   ''' id - is integer of actual UUT number\n
+       fw_path - it's a string with a full path on jlink script\n
+       jlink script consist all required parameters: device, frequency, name of srec file and programming address;\n
+       and shoud run in a segger command tool '''
+   print('\n' + f' JLINK PROGRAMMING '.center(HEADER_WIDTH, '='))
+   if not os.path.isfile(script_path):
+       print(f'JLink script {script_path} not found')
+       return False
+
+   dt = datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
+#    LOG_FNAME = os.path.join(LOG_PATH, f'JLink_UUT{id}_{dt}.log')
+   print(f'Run jlink scrpt:\n  {script_path}')
+   # run JLinkExe program without GUI and don't output log of execution but save it in the file
+   # JLink tool feature: '-Log', LOG_FNAME; it produce a big detailed log
+   response = subprocess.run(['JLinkExe', '-NoGui', '1', '-CommandFile', script_path], shell=False, capture_output=True)
+
+#    with open(LOG_FNAME, 'w') as jlog:  # save jlink output to log file
+#        jlog.write(response.stdout.decode('utf-8'))
+
+   res = True if response.returncode == 0 else False
+   print(f'JLink programming is {"OK" if res else "FAILED"}')
+#    print(f'For details see log in the file:\n  {LOG_FNAME}')
+   return res
 
 #========================= ADCs check presence section ============================
 print('\n' + ' CHECK AVAILABILITY FOR ADCs '.center(HEADER_WIDTH, '='))
@@ -92,6 +152,7 @@ def jlink_programming():
 #======================== Test sequence: Calibration   ============================
 
 #==================================================================================
+
 #======================== Test sequence: Is Power Good ============================
 def is_power_good():
     print('\n' + f' IS POWER GOOD UUT '.center(HEADER_WIDTH, '='))
@@ -101,92 +162,63 @@ def is_power_good():
 #==================================================================================
 
 #======================== Test sequence: scan qr code ============================
+def qr_scan():
+    DUT_SN = " "
+    DUT_MAC = "00:00:00:00:00:00"
+    scanned_qr = input('\n [+] Scan DUT QR code to start the test sequence \n')
+    time.sleep(1) #added for terminal clarity
+    print("SERIAL NUMBER : "+ scanned_qr)
+    time.sleep(1) #added for terminal clarity
+    qr_split = []
 
-def qr_code_csv():
-    dir_path = os.path.dirname(os.path.realpath(__file__))
-    scanflag = True
-    actual_weekday = 0
-
-
-    DUT_MAC= "00:00:00:00:00:00"
-    PASS_FAIL_FLAG = ""
-    CSV_FLAG = False
-
-    while scanflag:
-        scanned_qr = input('\n'+'Scan DUT QR code to start the test sequence'+'\n')
-        time.sleep(1) #added for terminal clarity
-        print('\n'+ scanned_qr +'\n')
-        time.sleep(1) #added for terminal clarity
-        qr_split = []
-
-        if "," in scanned_qr:
-            qr_split = scanned_qr.split(',')
-            print(qr_split)
+    if "," in scanned_qr:
+        qr_split = scanned_qr.split(',')
+        print(qr_split)
             
-            if len(qr_split) >= 2:
-                DUT_SN = qr_split[0]
-                DUT_MAC = qr_split[1]
-        else:
-            DUT_SN = scanned_qr
+        if len(qr_split) >= 2:
+            DUT_SN = qr_split[0]
+            DUT_MAC = qr_split[1]
+    else:
+        DUT_SN = scanned_qr
+    
+    if "AC" in qr_split or scanned_qr:
+        scanned_isoweek = scanned_qr[4:6]
 
-        if "AC" in qr_split or scanned_qr:
-            scanned_isoweek = scanned_qr[4:6]
-            #print('\n'+ scanned_isoweek)
-            date_today = date.today()
-            #print(date_today)
-            iso_weekday = date_today.isocalendar() #Provide week following iso standard
-            #print(iso_weekday[1])
-            #print('\n'+scanned_isoweek)
-            actual_weekday = iso_weekday[1]
+        return [1, DUT_SN, DUT_MAC, scanned_isoweek]
+    else:
+        print(" [-] ERROR during scanning")
+        exit(3)
+        return [0,0,0]
 
-            if actual_weekday == int(scanned_isoweek):
-                scanflag = False
-                #header = {'SerialNumber','BTMAC','TestResult'}
-                header = {'SerialNumber':DUT_SN,'BTMAC':DUT_MAC,'TestResult':PASS_FAIL_FLAG}
-                data = {'SerialNumber':DUT_SN,'BTMAC':DUT_MAC,'TestResult':PASS_FAIL_FLAG}
-                #print(data)
-                #saved_data=scanned_qr,Default_MAC,PASS_FAIL_FLAG
-                
-                DUT_FNAME = 'dut_w'+str(actual_weekday)+'.csv' 
-                DUT_PATH = os.path.join(dir_path,'dut',DUT_FNAME)
+def find_SN_in_file(file_name, SN):
+    with open(file_name, 'r') as csvfile:
+        reader = csv.DictReader(csvfile)
+        for row in reader:
+            if row['SerialNumber'] == SN:
+                return True
+    return False
 
-                if os.path.isfile(DUT_PATH):
-                    with open(DUT_PATH, "a", newline="") as file:
-                        writer = csv.DictWriter(file, fieldnames=data.keys())
-                        writer.writerow(data)
-                        CSV_FLAG = True
-                        print('\n'+f"Data written to '{DUT_PATH}'."+'\n')
-                else:
-                    with open(DUT_PATH, 'w', newline='', encoding='utf-8') as file:
-                        writer = csv.DictWriter(file, fieldnames=header)
-                        writer.writeheader()
-                        writer.writerow(data)
-                        CSV_FLAG = True
-                        print('\n'+f"CSV file '{DUT_PATH}' created and data written."+'\n')
+def add_csv_log(SN, MAC, isoweek, RESULTS):
+    dir_path = os.path.dirname(os.path.realpath(__file__))
 
-            if actual_weekday != int(scanned_isoweek):
-                scanflag = False
-                DUT_FNAME = 'dut_w'+str(scanned_isoweek)+'.csv' 
-                DUT_PATH = os.path.join(dir_path,'dut',DUT_FNAME)
+    DUT_FNAME = 'dut_w'+str(isoweek)+'.csv' 
+    DUT_PATH = os.path.join(dir_path,'dut',DUT_FNAME)
+    
+    DATE_TIME = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    
+    data = {'Date/Time':DATE_TIME, 'SerialNumber':SN,'BTMAC':MAC,'TestResults':format(RESULTS, "07b") }
+    
+    if not os.path.isfile(DUT_PATH):
+        with open(DUT_PATH, 'w', newline='', encoding='utf-8') as file:
+            writer = csv.DictWriter(file, fieldnames=data)
+            writer.writeheader()
 
-                header = {'SerialNumber':DUT_SN,'BTMAC':DUT_MAC,'TestResult':PASS_FAIL_FLAG}
-                data = {'SerialNumber':DUT_SN,'BTMAC':DUT_MAC,'TestResult':PASS_FAIL_FLAG}
-
-                if os.path.isfile(DUT_PATH):
-                    with open(DUT_PATH, "a", newline="") as file:
-                        writer = csv.DictWriter(file, fieldnames=data.keys())
-                        writer.writerow(data)
-                        CSV_FLAG = True
-                        print('\n'+f"Data written to '{DUT_PATH}'."+'\n')
-                else:
-                    with open(DUT_PATH, 'w', newline='', encoding='utf-8') as file:
-                        writer = csv.DictWriter(file, fieldnames=header)
-                        writer.writeheader()
-                        writer.writerow(data)
-                        CSV_FLAG = True
-                        print('\n'+f"CSV file '{DUT_PATH}' created and data written."+'\n')
-
-    return CSV_FLAG,DUT_SN,DUT_MAC
+    with open(DUT_PATH, "a", newline="") as file:
+        writer = csv.DictWriter(file, fieldnames=data.keys())
+        writer.writerow(data)
+        CSV_FLAG = True
+        print(f"\n [+] Data written to '{DUT_PATH}'.\n")
+    
 
 def check_current_sensor():  # now applicable for L1x buzzer
     ''' for current sensor using AIN2 on ADC, from datasheet - base level VOUT voltage without current - 1.65V\n
@@ -197,7 +229,7 @@ def check_current_sensor():  # now applicable for L1x buzzer
     Vout  = res[2]        # res[2] - value measured on AIN2
     Vbase = res[0] * 0.5  # res[0] - it should be 3.3V (VS, this power apply for the Current Sensor) and measure on AIN0 of ADC; VS*0.5 - from datasheet
     current = round((Vout - Vbase) / 0.4, 3)
-    print(f'Current Sensor: VOUT [{Vout} V], current [{current} A]')
+    print(f' [>] Current Sensor: VOUT [{Vout} V], current [{current} A]')
     return current
 
 def check_mic_level():  # now applicable only for L1x buzzer
@@ -208,7 +240,7 @@ def check_mic_level():  # now applicable only for L1x buzzer
     res = adc.get_adc_voltage(adc.POWER_GOOD_ADC)
     Vout  = res[3]        # res[3] - value measured on AIN3
     sound_level = int(50 * Vout)
-    print(f'Mic sound level: [{sound_level} dBA]')
+    print(f' [>] Mic sound level: [{sound_level} dBA]')
     return sound_level
 
 #==================================================================================
@@ -222,11 +254,6 @@ def check_mic_level():  # now applicable only for L1x buzzer
 # 'MOS_LAMP_LR_EN#' = 25, 'SW_OUT_1', 'SW_OUT_2', 'FB_AND_GATE', 'LA_PWM', 'ADC_DRDY#', 'ADC_RST#'
 
 def check_passthrough():
-    #GPIO.setup(23,GPIO.OUT)
-    #GPIO.setup(24,GPIO.OUT)
-    #GPIO.setup(25,GPIO.OUT)
-    #GPIO.setup(12,GPIO.IN)
-
     FB_AND_GATE = GPIO.input(12)
     counter = 0
     value = 0
@@ -235,31 +262,33 @@ def check_passthrough():
         
         try:
             FB_AND_GATE = GPIO.input(12)
+            print(" [.] Doing: Passthrough test")
 
             if FB_AND_GATE == 0:
-                print('\n'+ 'DRIVING PASSTHROUGH'+'\n')
+                #print('\n DRIVING PASSTHROUGH \n')
                 GPIO.output(23,0)
                 time.sleep(0.1)
                 FB_AND_GATE = GPIO.input(12)
-                #print('\n'+ f'FB_AND_GATE:{value}'+'\n')
+                #print('\n f'FB_AND_GATE:{value} \n')
                 GPIO.output(24,0)
                 time.sleep(0.1)
                 FB_AND_GATE = GPIO.input(12)
-                #print('\n'+ f'FB_AND_GATE:{value}'+'\n')
+                #print('\n f'FB_AND_GATE:{value} \n')
                 GPIO.output(25,0)
                 FB_AND_GATE = GPIO.input(12)
-                print('\n'+ f'FB_AND_GATE:{FB_AND_GATE}'+'\n')
+                #print(f'\n FB_AND_GATE:{FB_AND_GATE} \n')
 
                 counter += 1
 
                 if counter >= 5:
                     counter = 0
                     value = 1
-                    print('\n'+'Passthrough test FAILED'+'\n')
+                    print(' [-] FAILED Passthrough test  ')
                     PT_FLAG=False
 
             if FB_AND_GATE == 1:
-                print('\n'+ f'FB_AND_GATE:{FB_AND_GATE}'+'\n')
+                print(f'\n [+] TEST PASSED: Passthrough ')
+                #print(f'\n FB_AND_GATE:{FB_AND_GATE} \n')
                 value=1
                 PT_FLAG=True
                 GPIO.output(23,1)
@@ -284,14 +313,18 @@ def check_passthrough():
 
 # GPIO's names: '7V5_COMP', '7V5_SSR_COMP', '7V5_FB_COMP', 'UUT_PWR_EN', 'MOS_USB_N_EN#' = 23, 'MOS_USB_P_EN#' = 24,
 # 'MOS_LAMP_LR_EN#' = 25, 'SW_OUT_1', 'SW_OUT_2', 'FB_AND_GATE', 'LA_PWM', 'ADC_DRDY#', 'ADC_RST#'
-
+def power_enable():
+    print('\n [>] DRIVING POWER ')
+    GPIO.output(4,1)
+    time.sleep(1)
+    
+def power_disable():
+    print('\n [>] REMOVING POWER ')
+    GPIO.output(4,0)
+    time.sleep(1)
+    
+    
 def check_power_enable():
-
-    #GPIO.setup(4,GPIO.OUT)
-    #GPIO.setup(17,GPIO.IN)
-    #GPIO.setup(27,GPIO.IN)
-    #GPIO.setup(22,GPIO.IN)
-
     WC_7V5 = GPIO.input(17)
     WC_SSR = GPIO.input(27)
     WC_FB = GPIO.input(22)
@@ -302,18 +335,12 @@ def check_power_enable():
     if WC_7V5 and WC_SSR and WC_FB == True:
         PWR_EN_FLAG = True
 
-    #if WC_7V5 and WC_SSR and WC_FB == False:
-    #    PWR_EN_FLAG = False
-
     while PWR_EN_FLAG==False:
         try:
-            print('\n'+ 'DRIVING POWER'+'\n')
-            GPIO.output(4,1)
+
             WC_7V5 = GPIO.input(17)
             WC_SSR = GPIO.input(27)
             WC_FB = GPIO.input(22)
-
-            print(WC_7V5,WC_SSR,WC_FB)
 
             if WC_7V5 and WC_SSR and WC_FB == True:
                 PWR_EN_FLAG = True
@@ -322,11 +349,10 @@ def check_power_enable():
                 GPIO.output(4,0)
                 time.sleep(1)
                 counter += 1
-                print('\n'+'WC Failed RoF'+'\n')
                 if counter >= 5:
                     counter = 0
                     value = 1
-                    print('\n'+'Power Enable test FAILED'+'\n')
+                    print(' [>] FAILED Power Enable test ')
                     PWR_EN_FLAG=True
 
         except KeyboardInterrupt:
@@ -340,217 +366,151 @@ def check_power_enable():
 
 #============================  Linear actuator test  ===============================
 # ipwm = 3 or ipwm = 11
-def linear_actuator():
+def pairing_sequence():
+    sensor = Adsp9960()
+    sensor.enable_color_readings()
     #GPIO.setup(13,GPIO.OUT)
-    pwm = GPIO.PWM(13,50)
-    pwm.start(0)
-    i=0
-    PAIRED_FLAG=False
-    changestep='1'
-    PAIRING_REQUEST_FLAG=1
-    print('before try linear actuator')
+    #pwm = GPIO.PWM(13,50)
+    #pwm.start(11)
+    RESTART = False
+    IS_PAIRED = False
+    PAIRING = False
     
-
-    #read LED should be blue
-    #if led is blue -> pairing flag =0
-    while PAIRED_FLAG==False:
-        try:
-            rgb_all()
+    while not IS_PAIRED:
+        if RESTART:
+            print(" [-] Paired failed, trying again")
             time.sleep(1)
-            if RED and PAIRED_FLAG==False:
-                pwm.ChangeDutyCycle(2)
-                #time.sleep(1)
-                i += 1
-                changestate=input('enter y if blue LED')
-                if i>=50:
-                    i=0
-            if changestate=='y':
-                PAIRED_FLAG=True
-                print('\n'+f'{BLUE}'+'\n')
-                pwm.ChangeDutyCycle(11)
+        input(" [>] Press enter to start pairing ")
+        pwm.start(11)
+        pwm.ChangeDutyCycle(11)
+        time.sleep(1)
+        input(" [>] Press enter to restart pairing ")
+        pwm.ChangeDutyCycle(3.1)
+        #time.sleep(1)
+        print(sensor.enable_color_readings())
+        if(sensor.check_for_colored_light(BLUE,45)):
+            print(" [.] Reading RGB Color")
+            PAIRING = True
+            RESTART = False
+            
+        while PAIRING and not RESTART:
+            if(sensor.check_for_colored_light(GREEN, 35)):
+                print(" [+] Successfully paired")
+                PAIRING = False
+                IS_PAIRED = True
                 pwm.stop()
-                #if PAIRED_FLAG==True:
-                #    pwm.start(0)
+            if (sensor.check_for_colored_light(RED, 35)):
+                RESTART = True
+                break
+            #time.sleep(0.25)
+            
+    return IS_PAIRED
 
+#==================================================================================
 
-        except KeyboardInterrupt:
-            pwm.stop()
+#============================  unpairing test  ===============================
 
+def unpairing_sequence():
+    sensor = Adsp9960()
+    sensor.enable_color_readings()
+    #GPIO.setup(13,GPIO.OUT)
+    #pwm = GPIO.PWM(13,50)
+    #pwm.start(11)
+    UNRESTART = False
+    UNIS_PAIRED = False
+    UNPAIRING = False
     
-
-    '''
-    try:
-        while PAIRING_REQUEST_FLAG==1:
-            pwm.ChangeDutyCycle(10)
-                #read LED should be blue
-                #if led is blue -> pairing flag =0
-            print('\n'+'Linear_Actuator is now on'+'\n')
-            if
-                time.sleep(1)
-                PAIRING_REQUEST_FLAG=0
-
-            if PAIRING_REQUEST_FLAG==0:
-                pwm.ChangeDutyCycle(2)
-                time.sleep(1)
-                #pwm.stop()
-                print('Linear_Actuator is now off')
-
-    except KeyboardInterrupt:
-        pwm.stop()
-    '''
+    while not UNIS_PAIRED:
+        if UNRESTART:
+            print(" [-] Paired failed, trying again")
+            time.sleep(1)
+        input(" [>] Press enter to start unpairing ")
+        pwm.start(11)
+        pwm.ChangeDutyCycle(11)
+        time.sleep(1)
+        input(" [>] Press enter to restart unpairing ")
+        pwm.ChangeDutyCycle(3.1)
+        #time.sleep(1)
+        print(sensor.enable_color_readings())
+        if(sensor.check_for_colored_light(BLUE,45)):
+            print(" [.] Reading RGB Color")
+            UNPAIRING = True
+            UNRESTART = False
+            
+        while UNPAIRING and not UNRESTART:
+            if(sensor.check_for_colored_light(GREEN, 35)):
+                print(" [-] Failed, device is still paired")
+                UNPAIRING = False
+                UNIS_PAIRED = True
+                pwm.stop()
+            if (sensor.check_for_colored_light(RED, 35)):
+                print(" [+] Successfully unpaired")
+                UNRESTART = True
+                break
+            #time.sleep(0.25)
+            
+    return UNIS_PAIRED
+            
 #==================================================================================            
-
 #=========================== Ambient light sensor test =============================
 
-def rgb_sensor():
-    # Create an instance of the Adsp9960 class
+def rgb_check(COLOR, TEST_NUMBER,intensity):
     sensor = Adsp9960()
-    RGB_SENSOR_FLAG=False
-
-    # Enable color readings
-    if sensor.enable_color_readings() == I2C_FAILURE:
-        print("Failed to enable color readings.")
-        return
-
-    # Specify the expected color and intensity
-    expected_color = [RED,GREEN,BLUE]
-    expected_intensity = 100
-
-    # Check if the expected color meets the expected intensity
-    if sensor.read_expected_color(expected_color[0], expected_intensity):
-        print("The intensity of the color is equal to or greater than the expected intensity.")
-        RGB_SENSOR_FLAG = True
-    else:
-        print("The intensity of the color is less than the expected intensity.")
+    sensor.enable_color_readings()
+    color = ["clear", "red", "green", "blue"]
+    RESULT = False
     
-    return RGB_SENSOR_FLAG
-
-
-def rgb_all():
-    # Create an instance of the Adsp9960 class
-    sensor = Adsp9960()
-
-    # Enable color readings
-    if sensor.enable_color_readings() == I2C_FAILURE:
-        print("Failed to enable color readings.")
-        return
-
-    # Read and print all colors
-    colors = sensor.read_colors()
-    #colorlight = sensor.check_for_colored_light(RED,0)
-
-    if colors == I2C_FAILURE:
-        print("Failed to read color data.")
-        return
-
-    #time.sleep(0.1) # add clarity in terminal
-    #print("Red: ", colors[RED])
-    #print("Green: ", colors[GREEN])
-    #print("Blue: ", colors[BLUE])
-    #time.sleep(0.1) # add clarity in terminal
-
-    #choice = input('Enter color to be tested, red, green or blue')
-
-    #while True:
-    try:
-        colors = sensor.read_colors()
-        print(f'Red: {colors[RED]}, Green: {colors[GREEN]}, Blue: {colors[BLUE]}')
-        rgb_data.append([colors[RED], colors[GREEN], colors[BLUE]])
-        time.sleep(0.01)  # pause for 10 ms
-        return(colors)
+    # add here function to close previously activated LED (or just close all of them)
     
-    except KeyboardInterrupt:
-            #with open('rgb_data_'+str(choice)+'.csv', 'w', newline='') as file:
-            #    writer = csv.writer(file)
-            #    writer.writerows(rgb_data)
-        GPIO.cleanup()
-        return
-        
-    # Print out the color readings
-    # print("Red: ", colors[RED])
-    # print("Green: ", colors[GREEN])
-    # print("Blue: ", colors[BLUE])
+    if COLOR == RED:   pass # add code to activate RED   LED (replace "pass" with code or function)
+    if COLOR == BLUE:  pass # add code to activate BLUE  LED (replace "pass" with code or function)
+    if COLOR == GREEN: pass # add code to activate GREEN LED (replace "pass" with code or function)
+    
+    for test in range(0,TEST_NUMBER):
+        sensor.read_colors()
+
+        if sensor.color_data[COLOR][0]>= intensity:
+            print(f'[+] TEST PASSED  {color[COLOR]} LED : {sensor.color_data[COLOR][0]} light units')
+            RESULT = True
+        else: print(f'[+] TEST FAILED  {color[COLOR]} LED : {sensor.color_data[COLOR][0]} light units')
+
+    return RESULT
 
 #================================================================================== 
-
 #======================== Test sequence: Listen   ============================
-def listen_Buzzer():
-    MAX_DBA=True
-    DBA_TH=110
-    Audible_Alarm_FLAG = False
-    try:
-        while(MAX_DBA):
-            sound_level = check_mic_level()
-            print('\n'+f'{sound_level} dBA'+'\n')
-            if sound_level >= DBA_TH:
-                time.sleep(1)
-                print('\n'+f'TEST PASSED {sound_level} dBA'+'\n')
-                MAX_DBA=False
-                Audible_Alarm_FLAG = True
-        
-            print(Audible_Alarm_FLAG)
+def test_Buzzer(DBA_TH=110, time_to_test=1):
+    wait_time = 0
+    Audible_Alarm_PASS = False
+    # activate audible alarm max_level
 
-        return Audible_Alarm_FLAG    
-    
-    except KeyboardInterrupt:
-        GPIO.cleanup()
+    while(wait_time<=time_to_test):
+        sound_level = check_mic_level()
+        if sound_level >= DBA_TH:
+            Audible_Alarm_PASS = True
+            print(f'\n [+] TEST PASSED  : {sound_level} dBA')
+            break;
+        time.sleep(1)
+        wait_time += 1
 
+    return Audible_Alarm_PASS    
 
-
-'''
-### Test of input selected DBA thresh, will print the selected dBA level. Will run the listen mic until dBA th is acheived.
-
-
-def listen_Buzzer(DBA_TH):
-    MAX_DBA=True
-    Audible_Alarm_FLAG = False
-    print(f'Selected dBa level: {DBA_TH}')
-    try:
-        while(MAX_DBA):
-            sound_level = check_mic_level()
-            print('\n'+f'{sound_level} dBA'+'\n')
-            if sound_level >= DBA_TH:
-                time.sleep(1)
-                print('\n'+f'TEST PASSED {sound_level} dBA'+'\n')
-                MAX_DBA=False
-                Audible_Alarm_FLAG = True
-        
-            print(Audible_Alarm_FLAG)
-
-        return Audible_Alarm_FLAG    
-    
-    except KeyboardInterrupt:
-        GPIO.cleanup()'''
 
 #==================================================================================
 #======================== Test sequence: Detection Switches   ============================
 # Read the 2 reed switches, if the operator removes the top section while tests are ongoing,
 # The test sequence must be canceled.
 def Detection_Switches():
-    #GPIO.setup(7, GPIO.IN)
-    #GPIO.setup(8, GPIO.IN)
-
     SW1 = GPIO.input(7)
     SW2 = GPIO.input(8)
 
     result = SW1 and SW2
-
-    print(f'SW1: {SW1}\nSW2: {SW2}\nResult: {result}\n')
-    time.sleep(3)
     
     ENCLOSURE_STATE_FLAG = result
 
     if not result:
-        print('Test Canceled\n')
+        print(' [-] Test Canceled\n')
 
     return ENCLOSURE_STATE_FLAG
-
-#==================================================================================
-#======================== Test Manager ============================================
-
-def test_manager(PT_FLAG,Audible_Alarm_FLAG,ENCLOSURE_STATE_FLAG,RGB_SENSOR_FLAG,PWR_EN_FLAG):
-
-    return
 
 #==================================================================================
 
@@ -558,60 +518,93 @@ if __name__ == '__main__':
     '''if not is_usb_jlink_connected():
         print('ERROR: Not found USB JLink device')
         exit(1)'''
-    x=0
     PAIRED_FLAG=False
+    GLOBAL_RESULTS = 0
+    GPIO.setup(13,GPIO.OUT)
+    pwm = GPIO.PWM(13,50)
+    #pwm.start(3.1)
+    time.sleep(1)
+    #pwm.ChangeDutyCycle(3.1)
     
-
+    #CSV_STATUS = qr_scan() #Unit ID is scanned (should save data)
+ 
     is_power_good() #Power of Test PCBA
-    check_passthrough() #Unit is connected to Test PCBA
-    CSV_STATUS = qr_code_csv() #Unit ID is scanned (should save data)
-    print(CSV_STATUS[0])
+    if(check_passthrough()):                    GLOBAL_RESULTS + 0b1
+    else: 
+        print("\n Exit failed Check cables")
+        exit(3);
+    
   
     jlink_programming() # ask and if need - do with default FW
 
     while True:
+        try:
     #while(Detection_Switches()): ######need to be added back
+        # if CSV_STATUS[0] == True:
         
-        if CSV_STATUS[0] == True:
-            check_power_enable()
-            linear_actuator()
-            listen_Buzzer()
-            rgb_all()
-
-
-
-            '''
-            yn=input('\n'+'Please Turn on the Unit'+'\n'+'When the unit is powered, enter Y'+'\n'+'To exit, enter N')
-            #check_passthrough()
-            if yn == 'y' or 'Y':
-                print("=========================== Programming Step ======================================")
-                programmed=input('\n'+'Is the programming done?'+'\n'+'Enter Y when completed'+'\n'+'To Exit, enter N')
-
-                #check_power_enable()
-                #check_current_sensor()
+            power_enable() 
+            if(check_power_enable()):
+                GLOBAL_RESULTS + 0b10
+                input("\nReady to program the DUT \nAfter programming is complete, press ENTER to continue.")
+                #if(jlink_programming()):            GLOBAL_RESULTS += 0b100
+            
+            input("\nManufacturing information step, after completing press ENTER to continue.")
+            
+            if(pairing_sequence()):                 GLOBAL_RESULTS += 0b1000
+            
+            if(input("\nReady to test RED LED ?   y/n : ") == "y"):
+                if(rgb_check(RED,  3, 45)):         GLOBAL_RESULTS += 0b10000
+            
+            if(input("\nReady to test GREEN LED ? y/n : ") == "y"):
+                if(rgb_check(GREEN,3, 35)):         GLOBAL_RESULTS += 0b100000
+            
+            if(input("\nReady to test BLUE LED ?  y/n : ") == "y"):
+                if(rgb_check(BLUE, 3, 45)):         GLOBAL_RESULTS += 0b1000000
+            
+            if(input("\nReady to test audible alarm highest noise level ? y/n : ") == "y"):
+                if(test_Buzzer(time_to_test=6)):    GLOBAL_RESULTS += 0b10000000
                 
-            for x in range(5):
-                #rgb_sensor()
-                rgb_all()
-                linear_actuator()
-                #check_mic_level()
-
-                FULL_PASS_FLAG=listen_Buzzer()
-            if FULL_PASS_FLAG==True:
-                print('\n'+'TEST PASSED'+'\n')
-                print('\n'+'TEST PASSED'+'\n')
-                print('\n'+'TEST PASSED'+'\n')
-                print('\n'+'TEST PASSED'+'\n')
-                exit
-    
-    while Detection_Switches():
-    # This code will run as long as Detection_Switches() returns True
-        rgb_sensor()
-        rgb_all()
-        if CSV_STATUS[0] == 'True':
-            check_passthrough()
-            check_power_enable()
-            check_current_sensor()
-            linear_actuator()
-            check_mic_level()
-    '''
+            if(input("\nReady to unpair? y/n : ") == "y"):
+                unpairing_sequence()
+            
+            print("GLobal results")
+            print(GLOBAL_RESULTS)
+            
+            power_disable()
+            print("3 Seconds before power on")
+            time.sleep(3)
+            '''
+            if(CSV_STATUS[0] == True):
+                add_csv_log(CSV_STATUS[1], CSV_STATUS[2], CSV_STATUS[3], GLOBAL_RESULTS)
+                exit(0)
+             '''   
+        except KeyboardInterrupt:
+            print("Keyboard Interrupt")
+            #pwm = GPIO.PWM(13,50)
+            pwm.start(3.1)
+            time.sleep(1)
+            GPIO.output(4,0)
+            GPIO.cleanup()
+'''
+Code sequence: If preflashed
+1. Scan QR code (should have Serial number and bluetooth mac)
+    Scan will keep the qr code information to counter validate the info on the DUT.
+    2.while( switches == True)
+        2.1 passthrough
+        2.2 Power Enable
+        2.3 Pairing
+        2.4 Read information -> Compare with scanned info
+        2.5 RGB led testing -> automatically activates the Red, Green and Blue leds
+        2.6 Audible Alarm -> make the audible alarm buzz >90dBA
+        2.7 Unpairing
+        2.8 Power off
+        2.9 CSV file
+            2.9.1 creation of the file if not already done.
+            2.9.1 Write in exsisting file with test data.
+                Device Serial Number:
+                Device BT MAC:
+                Date/time:
+                Test Data= Final Global_Results
+        2.10 Exit script or return to original step.
+        
+'''
