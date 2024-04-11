@@ -3,6 +3,7 @@
 import RPi.GPIO as GPIO
 import rpi_gpio
 import adc
+import jlink
 import time, os, atexit
 import csv
 import datetime
@@ -100,20 +101,6 @@ def jlink_programming(script_path=JLINK_SCPIRT_PATH):
 #    print(f'For details see log in the file:\n  {LOG_FNAME}')
    return res
 
-
-'''# create jlink script from template if not exist yet for specified FW
-FW_PATH_REPLACE_MARKER = 'FW_PATH'
-if not os.path.exists(JLINK_SCPIRT_PATH):
-    with open(JLINK_TEMPLATE_SCPIRT_PATH, 'r') as jlink_script_template:
-        script = jlink_script_template.readlines()
-        with open(JLINK_SCPIRT_PATH, 'w') as jlink_script:
-            for line in script:
-                if FW_PATH_REPLACE_MARKER in line:
-                    lkw = line.strip().split()
-                    lkw[1] = FW_PATH   # it because line should be as: 'loadfile FW_PATH 0x00000000'
-                    line = ' '.join(lkw) + '\n'
-                jlink_script.write(line)'''
-
 #========================= ADCs check presence section ============================
 print('\n' + ' CHECK AVAILABILITY FOR ADCs '.center(HEADER_WIDTH, '='))
 adc.load_adc_conf()
@@ -152,6 +139,18 @@ if not res:
     print('GPIOs initialization is FAILED, fix it (check power, cable connections, PRi GPIO configuration, etc.) and try again')
     exit(3)
 else: print('GPIOs initialization is OK')
+#==================================================================================
+
+#====================== Test sequence: JLink programming ==========================
+def jlink_programming():
+    is_need_jlink_flash = input('Is need to do jlink programming?[Y/n]:').lower()
+    if 'y' == is_need_jlink_flash:
+        if jlink.is_usb_jlink_connected():
+            jlink.jlink_programming()
+#==================================================================================
+
+#======================== Test sequence: Calibration   ============================
+
 #==================================================================================
 
 #======================== Test sequence: Is Power Good ============================
@@ -536,6 +535,8 @@ if __name__ == '__main__':
         exit(3);
     
   
+    jlink_programming() # ask and if need - do with default FW
+
     while True:
         try:
     #while(Detection_Switches()): ######need to be added back
